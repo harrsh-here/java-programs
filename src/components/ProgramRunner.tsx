@@ -8,30 +8,75 @@ interface ProgramRunnerProps {
 }
 
 const ProgramRunner: React.FC<ProgramRunnerProps> = ({ program, onBack }) => {
-  const [input, setInput] = useState('');
-  const [output, setOutput] = useState('');
+  const [terminalContent, setTerminalContent] = useState<string[]>([]);
   const [isRunning, setIsRunning] = useState(false);
+  const [isWaitingForInput, setIsWaitingForInput] = useState(false);
+  const [currentInput, setCurrentInput] = useState('');
   const [showCode, setShowCode] = useState(false);
   const [copied, setCopied] = useState(false);
-  const outputRef = useRef<HTMLDivElement>(null);
+  const [programState, setProgramState] = useState<any>(null);
+  const terminalRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const addToTerminal = (text: string, isInput: boolean = false) => {
+    setTerminalContent(prev => [...prev, `${isInput ? '> ' : ''}${text}`]);
+  };
+
+  const scrollToBottom = () => {
+    if (terminalRef.current) {
+      terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
+    }
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [terminalContent]);
+
+  useEffect(() => {
+    if (isWaitingForInput && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [isWaitingForInput]);
 
   const handleRun = async () => {
     setIsRunning(true);
-    setOutput('Running program...\n');
+    setTerminalContent([]);
+    setProgramState(null);
     
     try {
-      const result = await program.runner(input);
-      setOutput(result);
+      await program.interactiveRunner(addToTerminal, setIsWaitingForInput, setProgramState);
     } catch (error) {
-      setOutput(`Error: ${error instanceof Error ? error.message : 'Unknown error occurred'}`);
+      addToTerminal(`Error: ${error instanceof Error ? error.message : 'Unknown error occurred'}`);
     } finally {
       setIsRunning(false);
+      setIsWaitingForInput(false);
+    }
+  };
+
+  const handleInputSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentInput.trim() || !isWaitingForInput) return;
+
+    addToTerminal(currentInput, true);
+    const input = currentInput;
+    setCurrentInput('');
+    setIsWaitingForInput(false);
+
+    try {
+      await program.interactiveRunner(addToTerminal, setIsWaitingForInput, setProgramState, input);
+    } catch (error) {
+      addToTerminal(`Error: ${error instanceof Error ? error.message : 'Unknown error occurred'}`);
+      setIsRunning(false);
+      setIsWaitingForInput(false);
     }
   };
 
   const handleReset = () => {
-    setInput('');
-    setOutput('');
+    setTerminalContent([]);
+    setIsRunning(false);
+    setIsWaitingForInput(false);
+    setCurrentInput('');
+    setProgramState(null);
   };
 
   const copyCode = async () => {
@@ -43,12 +88,6 @@ const ProgramRunner: React.FC<ProgramRunnerProps> = ({ program, onBack }) => {
       console.error('Failed to copy code:', err);
     }
   };
-
-  useEffect(() => {
-    if (outputRef.current) {
-      outputRef.current.scrollTop = outputRef.current.scrollHeight;
-    }
-  }, [output]);
 
   return (
     <div className="space-y-6">
@@ -110,30 +149,25 @@ const ProgramRunner: React.FC<ProgramRunnerProps> = ({ program, onBack }) => {
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center space-x-2">
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
               <Terminal className="w-5 h-5" />
-              <span>Input</span>
+              <span>Interactive Terminal</span>
             </h3>
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Enter your input here (one value per line)..."
-              className="w-full h-64 p-4 border border-gray-300 rounded-lg font-mono text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-            <div className="flex space-x-3 mt-4">
+            <div className="flex space-x-3">
               <button
                 onClick={handleRun}
-                disabled={isRunning}
+                disabled={isRunning || isWaitingForInput}
                 className="flex items-center space-x-2 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white font-medium py-2 px-4 rounded-lg transition-colors"
               >
                 <Play className="w-4 h-4" />
-                <span>{isRunning ? 'Running...' : 'Run Program'}</span>
+                <span>{isRunning ? 'Running...' : 'Start Program'}</span>
               </button>
               <button
                 onClick={handleReset}
-                className="flex items-center space-x-2 bg-gray-600 hover:bg-gray-700 text-white font-medium py-2 px-4 rounded-lg transition-colors"
+                disabled={isRunning}
+                className="flex items-center space-x-2 bg-gray-600 hover:bg-gray-700 disabled:bg-gray-400 text-white font-medium py-2 px-4 rounded-lg transition-colors"
               >
                 <RotateCcw className="w-4 h-4" />
                 <span>Reset</span>
@@ -141,20 +175,46 @@ const ProgramRunner: React.FC<ProgramRunnerProps> = ({ program, onBack }) => {
             </div>
           </div>
 
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center space-x-2">
-              <Terminal className="w-5 h-5" />
-              <span>Output</span>
-            </h3>
+          <div className="bg-gray-900 rounded-lg overflow-hidden">
             <div
-              ref={outputRef}
-              className="w-full h-64 p-4 bg-gray-900 text-green-400 rounded-lg font-mono text-sm overflow-y-auto scrollbar-thin"
+              ref={terminalRef}
+              className="h-96 p-4 text-green-400 font-mono text-sm overflow-y-auto scrollbar-thin"
             >
-              <pre className="whitespace-pre-wrap">
-                {output || 'Output will appear here after running the program...'}
-              </pre>
+              {terminalContent.length === 0 ? (
+                <div className="text-gray-500">
+                  Click "Start Program" to begin execution...
+                </div>
+              ) : (
+                terminalContent.map((line, index) => (
+                  <div key={index} className="mb-1 whitespace-pre-wrap">
+                    {line}
+                  </div>
+                ))
+              )}
+              {isWaitingForInput && (
+                <div className="flex items-center">
+                  <span className="text-yellow-400 mr-2">></span>
+                  <form onSubmit={handleInputSubmit} className="flex-1">
+                    <input
+                      ref={inputRef}
+                      type="text"
+                      value={currentInput}
+                      onChange={(e) => setCurrentInput(e.target.value)}
+                      className="bg-transparent border-none outline-none text-green-400 font-mono text-sm w-full"
+                      placeholder="Enter your input..."
+                      disabled={!isWaitingForInput}
+                    />
+                  </form>
+                </div>
+              )}
             </div>
           </div>
+          
+          {isWaitingForInput && (
+            <div className="text-sm text-gray-600 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+              <strong>Waiting for input:</strong> Type your response and press Enter
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -121,6 +121,7 @@ public class BankAccount {
     }
 }`,
     runner: async (input: string): Promise<string> => {
+      // Keep the old runner for backward compatibility
       const lines = input.trim().split('\n').filter(line => line.trim());
       let output = '';
       let lineIndex = 0;
@@ -290,6 +291,227 @@ public class BankAccount {
       }
 
       return output;
+    },
+    interactiveRunner: async (addToTerminal, setWaitingForInput, setProgramState, userInput) => {
+      if (!userInput) {
+        // Initialize program
+        await delay(400);
+        addToTerminal("--- Welcome to XYZ Bank ---");
+        await delay(900);
+        addToTerminal("Create a Bank Account here ...");
+        await delay(500);
+        addToTerminal("Enter Age : ");
+        setProgramState({ step: 'age' });
+        setWaitingForInput(true);
+        return;
+      }
+
+      const state = setProgramState as any;
+      const currentState = state.current || { step: 'age', balance: 0 };
+
+      switch (currentState.step) {
+        case 'age':
+          const age = parseInt(userInput);
+          if (age <= 18 || age > 110) {
+            addToTerminal("!!!You can't create account, you have to be above 18 and below 110 to create an account..");
+            await delay(500);
+            addToTerminal("Enter Age : ");
+            setWaitingForInput(true);
+            return;
+          }
+          currentState.age = age;
+          currentState.step = 'name';
+          addToTerminal("Enter Name : ");
+          setProgramState(currentState);
+          setWaitingForInput(true);
+          break;
+
+        case 'name':
+          currentState.name = userInput;
+          currentState.step = 'phone';
+          addToTerminal("Enter Phone Number : ");
+          setProgramState(currentState);
+          setWaitingForInput(true);
+          break;
+
+        case 'phone':
+          if (userInput.length !== 10) {
+            addToTerminal("!!!Please enter the phone number with 10 digits..");
+            await delay(500);
+            addToTerminal("Enter Phone Number : ");
+            setWaitingForInput(true);
+            return;
+          }
+          currentState.phoneNo = userInput;
+          currentState.step = 'pin';
+          addToTerminal("Enter a 4 digit pin to setup the account : ");
+          setProgramState(currentState);
+          setWaitingForInput(true);
+          break;
+
+        case 'pin':
+          const pin = parseInt(userInput);
+          if (Math.abs(pin).toString().length !== 4) {
+            addToTerminal("!!Please enter a valid 4 digit pin..");
+            await delay(500);
+            addToTerminal("Enter a 4 digit pin to setup the account : ");
+            setWaitingForInput(true);
+            return;
+          }
+          currentState.pin = pin;
+          currentState.step = 'menu';
+          addToTerminal(`Welcome, ${currentState.name}! what operations would you like to perform..`);
+          await delay(500);
+          addToTerminal("\nChoose Operations :");
+          addToTerminal("1. Check Balance");
+          addToTerminal("2. Deposit Amount");
+          addToTerminal("3. Withdraw Amount");
+          addToTerminal("4. View Account Details");
+          addToTerminal("5. exit..!");
+          setProgramState(currentState);
+          setWaitingForInput(true);
+          break;
+
+        case 'menu':
+          const operation = parseInt(userInput);
+          if (operation === 5) {
+            addToTerminal("Exiting...!");
+            setWaitingForInput(false);
+            return;
+          }
+          if (operation < 1 || operation > 5) {
+            addToTerminal("!!!Please Enter a valid choice..");
+            await delay(500);
+            addToTerminal("\nChoose Operations :");
+            addToTerminal("1. Check Balance");
+            addToTerminal("2. Deposit Amount");
+            addToTerminal("3. Withdraw Amount");
+            addToTerminal("4. View Account Details");
+            addToTerminal("5. exit..!");
+            setWaitingForInput(true);
+            return;
+          }
+          currentState.operation = operation;
+          currentState.step = 'pin_verify';
+          addToTerminal("!!! Enter PIN to Perform the Operation !!!");
+          setProgramState(currentState);
+          setWaitingForInput(true);
+          break;
+
+        case 'pin_verify':
+          const enteredPin = parseInt(userInput);
+          if (Math.abs(enteredPin).toString().length !== 4) {
+            addToTerminal("!!!Enter a 4 digit PIN, OPERATION FAILED!");
+            await delay(500);
+            addToTerminal("\nChoose Operations :");
+            addToTerminal("1. Check Balance");
+            addToTerminal("2. Deposit Amount");
+            addToTerminal("3. Withdraw Amount");
+            addToTerminal("4. View Account Details");
+            addToTerminal("5. exit..!");
+            currentState.step = 'menu';
+            setProgramState(currentState);
+            setWaitingForInput(true);
+            return;
+          }
+          if (enteredPin !== currentState.pin) {
+            addToTerminal("Wrong PIN, Try again");
+            await delay(500);
+            addToTerminal("\nChoose Operations :");
+            addToTerminal("1. Check Balance");
+            addToTerminal("2. Deposit Amount");
+            addToTerminal("3. Withdraw Amount");
+            addToTerminal("4. View Account Details");
+            addToTerminal("5. exit..!");
+            currentState.step = 'menu';
+            setProgramState(currentState);
+            setWaitingForInput(true);
+            return;
+          }
+          
+          addToTerminal("Please wait, processing ...");
+          await delay(500);
+          
+          switch (currentState.operation) {
+            case 1:
+              addToTerminal(`Your Current balance is\n₹${currentState.balance || 0}`);
+              break;
+            case 2:
+              currentState.step = 'deposit';
+              addToTerminal("Enter the amount you want to deposit!");
+              setProgramState(currentState);
+              setWaitingForInput(true);
+              return;
+            case 3:
+              currentState.step = 'withdraw';
+              addToTerminal("Enter the amount you want to withdraw!");
+              setProgramState(currentState);
+              setWaitingForInput(true);
+              return;
+            case 4:
+              addToTerminal("--- Account Holder Details ---");
+              addToTerminal(`Name : ${currentState.name}`);
+              addToTerminal(`Age : ${currentState.age}`);
+              addToTerminal(`Phone no. : +91${currentState.phoneNo}`);
+              break;
+          }
+          
+          await delay(1000);
+          addToTerminal("\nChoose Operations :");
+          addToTerminal("1. Check Balance");
+          addToTerminal("2. Deposit Amount");
+          addToTerminal("3. Withdraw Amount");
+          addToTerminal("4. View Account Details");
+          addToTerminal("5. exit..!");
+          currentState.step = 'menu';
+          setProgramState(currentState);
+          setWaitingForInput(true);
+          break;
+
+        case 'deposit':
+          const depositAmount = parseFloat(userInput);
+          if (isNaN(depositAmount) || depositAmount <= 0) {
+            addToTerminal("Please enter a valid amount");
+          } else {
+            currentState.balance = (currentState.balance || 0) + depositAmount;
+            addToTerminal(`--- Amount ₹${depositAmount} deposit successful! ---`);
+          }
+          await delay(1000);
+          addToTerminal("\nChoose Operations :");
+          addToTerminal("1. Check Balance");
+          addToTerminal("2. Deposit Amount");
+          addToTerminal("3. Withdraw Amount");
+          addToTerminal("4. View Account Details");
+          addToTerminal("5. exit..!");
+          currentState.step = 'menu';
+          setProgramState(currentState);
+          setWaitingForInput(true);
+          break;
+
+        case 'withdraw':
+          const withdrawAmount = parseFloat(userInput);
+          if (isNaN(withdrawAmount) || withdrawAmount <= 0) {
+            addToTerminal("Please enter a valid amount");
+          } else if (withdrawAmount > (currentState.balance || 0)) {
+            addToTerminal("!!!You don't have enough balance to complete this transaction");
+          } else if (withdrawAmount % 100 !== 0) {
+            addToTerminal("Please enter the value in multiple of 100 !!");
+          } else {
+            currentState.balance = (currentState.balance || 0) - withdrawAmount;
+            addToTerminal(`--- Amount ₹${withdrawAmount} withdraw successful! ---`);
+          }
+          await delay(1000);
+          addToTerminal("\nChoose Operations :");
+          addToTerminal("1. Check Balance");
+          addToTerminal("2. Deposit Amount");
+          addToTerminal("3. Withdraw Amount");
+          addToTerminal("4. View Account Details");
+          addToTerminal("5. exit..!");
+          currentState.step = 'menu';
+          setProgramState(currentState);
+          setWaitingForInput(true);
+          break;
+      }
     }
   },
   {
@@ -418,6 +640,89 @@ public class TemperatureConverter {
       }
 
       return output;
+    },
+    interactiveRunner: async (addToTerminal, setWaitingForInput, setProgramState, userInput) => {
+      if (!userInput) {
+        // Initialize program
+        addToTerminal("\nEnter Choice:");
+        addToTerminal("1. C -> F");
+        addToTerminal("2. F -> C");
+        addToTerminal("Press 0 to exit");
+        setProgramState({ step: 'choice' });
+        setWaitingForInput(true);
+        return;
+      }
+
+      const state = setProgramState as any;
+      const currentState = state.current || { step: 'choice' };
+
+      switch (currentState.step) {
+        case 'choice':
+          const choice = parseInt(userInput);
+          if (isNaN(choice)) {
+            addToTerminal("Invalid input! Please enter a number.");
+            await delay(500);
+            addToTerminal("\nEnter Choice:");
+            addToTerminal("1. C -> F");
+            addToTerminal("2. F -> C");
+            addToTerminal("Press 0 to exit");
+            setWaitingForInput(true);
+            return;
+          }
+
+          if (choice === 0) {
+            addToTerminal("Exiting...");
+            setWaitingForInput(false);
+            return;
+          }
+
+          if (choice !== 1 && choice !== 2) {
+            addToTerminal("Enter a valid choice (1 or 2)");
+            await delay(500);
+            addToTerminal("\nEnter Choice:");
+            addToTerminal("1. C -> F");
+            addToTerminal("2. F -> C");
+            addToTerminal("Press 0 to exit");
+            setWaitingForInput(true);
+            return;
+          }
+
+          currentState.choice = choice;
+          currentState.step = 'temperature';
+          addToTerminal("Enter Temperature: ");
+          setProgramState(currentState);
+          setWaitingForInput(true);
+          break;
+
+        case 'temperature':
+          const temperature = parseFloat(userInput);
+          if (isNaN(temperature)) {
+            addToTerminal("Invalid temperature input!");
+            await delay(500);
+            addToTerminal("Enter Temperature: ");
+            setWaitingForInput(true);
+            return;
+          }
+
+          let newTemp;
+          if (currentState.choice === 1) {
+            newTemp = (temperature * 9.0 / 5.0) + 32;
+            addToTerminal(`${temperature}°C is ${newTemp.toFixed(2)}°F`);
+          } else {
+            newTemp = (temperature - 32) * 5.0 / 9.0;
+            addToTerminal(`${temperature}°F is ${newTemp.toFixed(2)}°C`);
+          }
+
+          await delay(1000);
+          addToTerminal("\nEnter Choice:");
+          addToTerminal("1. C -> F");
+          addToTerminal("2. F -> C");
+          addToTerminal("Press 0 to exit");
+          currentState.step = 'choice';
+          setProgramState(currentState);
+          setWaitingForInput(true);
+          break;
+      }
     }
   },
   {
@@ -568,6 +873,73 @@ public class java_keyword_identifier {
       }
 
       return output;
+    },
+    interactiveRunner: async (addToTerminal, setWaitingForInput, setProgramState, userInput) => {
+      const keywords = [
+        "abstract", "assert", "boolean", "break", "byte",
+        "case", "catch", "char", "class", "const",
+        "continue", "default", "do", "double", "else",
+        "enum", "extends", "final", "finally", "float",
+        "for", "goto", "if", "implements", "import",
+        "instanceof", "int", "interface", "long", "native",
+        "new", "package", "private", "protected", "public",
+        "return", "short", "static", "strictfp", "super",
+        "switch", "synchronized", "this", "throw", "throws",
+        "transient", "try", "void", "volatile", "while"
+      ];
+
+      if (!userInput) {
+        // Initialize program
+        addToTerminal("Enter The input String (Enter 1 to Exit) : ");
+        setProgramState({ step: 'input' });
+        setWaitingForInput(true);
+        return;
+      }
+
+      if (userInput === "1") {
+        addToTerminal("Exiting..!");
+        setWaitingForInput(false);
+        return;
+      }
+
+      const matched: string[] = [];
+      const unMatched: string[] = [];
+      const tokens = userInput.split(/\W+/).filter(token => token.length > 0);
+
+      for (const token of tokens) {
+        if (keywords.includes(token)) {
+          matched.push(token);
+        } else {
+          unMatched.push(token);
+        }
+      }
+
+      addToTerminal("\n\nTokens :");
+      let tokenLine = "";
+      for (let i = 0; i < tokens.length; i++) {
+        tokenLine += tokens[i];
+        if (i < tokens.length - 1) {
+          tokenLine += ",";
+        }
+        if ((i + 1) % 3 === 0 || i === tokens.length - 1) {
+          addToTerminal(tokenLine);
+          tokenLine = "";
+        }
+      }
+
+      addToTerminal("\n\nMatched Keywords :");
+      for (const mToken of matched) {
+        addToTerminal(mToken);
+      }
+
+      addToTerminal("\nNon-Matched Keywords :");
+      for (const umToken of unMatched) {
+        addToTerminal(umToken);
+      }
+
+      await delay(1000);
+      addToTerminal("\nEnter The input String (Enter 1 to Exit) : ");
+      setWaitingForInput(true);
     }
   },
   {
@@ -760,6 +1132,93 @@ public class operator_identifier_java {
       }
 
       return output;
+    },
+    interactiveRunner: async (addToTerminal, setWaitingForInput, setProgramState, userInput) => {
+      const operators = ["+", "-", "*", "/", "%", "++", "--", "==", "!=", ">", "<", ">=", "<=",
+        "&&", "||", "!", "&", "|", "^", "~",
+        "<<", ">>", ">>>", "=", "+=", "-=", "*=",
+        "/=", "%=", "&=", "|=", "^=", "<<=", ">>=", ">>>=", "instanceof", "?:"
+      ];
+
+      const keywords = [
+        "abstract", "assert", "boolean", "break", "byte",
+        "case", "catch", "char", "class", "const",
+        "continue", "default", "do", "double", "else",
+        "enum", "extends", "final", "finally", "float",
+        "for", "goto", "if", "implements", "import",
+        "instanceof", "int", "interface", "long", "native",
+        "new", "package", "private", "protected", "public",
+        "return", "short", "static", "strictfp", "super",
+        "switch", "synchronized", "this", "throw", "throws",
+        "transient", "try", "void", "volatile", "while"
+      ];
+
+      if (!userInput) {
+        // Initialize program
+        addToTerminal("Enter the Sentence (Enter 1 to exit) : ");
+        setProgramState({ step: 'input' });
+        setWaitingForInput(true);
+        return;
+      }
+
+      if (userInput === "1") {
+        addToTerminal("Exiting..");
+        setWaitingForInput(false);
+        return;
+      }
+
+      const matched: string[] = [];
+      const unMatched: string[] = [];
+      const opMatched: string[] = [];
+      
+      const tokens = userInput.split(/\W+/).filter(token => token.length > 0);
+      const opTokens = userInput.split(/\s+/).filter(token => token.length > 0);
+
+      for (const token of tokens) {
+        if (keywords.includes(token)) {
+          matched.push(token);
+        } else {
+          unMatched.push(token);
+        }
+      }
+
+      for (const token of opTokens) {
+        if (operators.includes(token)) {
+          opMatched.push(token);
+        }
+      }
+
+      addToTerminal("\n\nTokens :");
+      let tokenLine = "";
+      for (let i = 0; i < tokens.length; i++) {
+        tokenLine += tokens[i];
+        if (i < tokens.length - 1) {
+          tokenLine += ",";
+        }
+        if ((i + 1) % 3 === 0 || i === tokens.length - 1) {
+          addToTerminal(tokenLine);
+          tokenLine = "";
+        }
+      }
+
+      addToTerminal("\nMatched Keywords :");
+      for (const mToken of matched) {
+        addToTerminal(mToken);
+      }
+
+      addToTerminal("\nMatched Operators :");
+      for (const opToken of opMatched) {
+        addToTerminal(opToken);
+      }
+
+      addToTerminal("\nNon-Matched Keywords :");
+      for (const umToken of unMatched) {
+        addToTerminal(umToken);
+      }
+
+      await delay(1000);
+      addToTerminal("\nEnter the Sentence (Enter 1 to exit) : ");
+      setWaitingForInput(true);
     }
   }
 ];
